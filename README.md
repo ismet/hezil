@@ -42,6 +42,9 @@ in Turkish — all identifiers, comments, and UI labels follow the Turkish termi
   pure SVG + JS, dark/light theme). No internet or libraries required.
 - **Local dashboard server** — solves the operation study of any alternative on demand
   (`pano_sunucu.py`, port 8765) and caches results.
+- **Login gate & audit log** — simple multi-user login from `.env` (copy `.env.example` →
+  `.env`), 1-hour idle auto-logout, username + "Çıkış" button in the dashboard header, and a
+  plain-text `giris_cikis.log` recording every login/logout (manual and automatic).
 - **Turbine manufacturer data package** (9 charts + Excel) and a **scaled RCC dam cross-section**.
 - **Sensitivity analyses** — fixed tariff, EM unit cost, and daily time-step effects (no DP re-solve).
 
@@ -102,6 +105,7 @@ python alternatifler.py
 python dashboard.py
 
 # 4) Local server (solves operation studies on demand, opens the browser)
+#    NOTE: .env is required — copy .env.example to .env and set credentials first.
 python pano_sunucu.py
 #    On Windows, double-click: pano_baslat.bat
 #    Stop with: Ctrl+C
@@ -109,6 +113,21 @@ python pano_sunucu.py
 
 Even without the server running, double-clicking `hezil_dashboard.html` opens the dashboard; only
 the operation-study section falls back to the embedded data.
+
+### Giriş (login)
+
+- **Setup:** `cp .env.example .env`, then set `KULLANICI_1_ADI` / `KULLANICI_1_SIFRE` (more pairs:
+  `KULLANICI_2_…`, …). Optional: `OTURUM_SURE_S` (idle timeout, default 3600 s, min 10) and
+  `LOG_DOSYASI` (default `giris_cikis.log`).
+- **Behavior:** the dashboard shows a login screen when served by `pano_sunucu.py`; after 1 hour
+  without page interaction the session expires and the user is logged out automatically. The
+  header shows the username and a "Çıkış" (logout) button. Every login/logout/failed attempt is
+  appended to the log file with timestamp, user, and IP.
+- **Client IP in the log:** direct access logs the connecting client's IP (testing from the same
+  machine shows `127.0.0.1` — normal). Behind a reverse proxy, set `GUVENILIR_PROXY=127.0.0.1`
+  (the proxy's address) in `.env` so the real client IP is read from `X-Forwarded-For`.
+- **Note:** opening `hezil_dashboard.html` directly (`file://`) or hosting it on another static
+  server bypasses login — auth is enforced only by `pano_sunucu.py`.
 
 ---
 
@@ -119,7 +138,7 @@ the operation-study section falls back to the embedded data.
 | `optimzasyon.py` | DP operation optimization + report for a single configuration | `hezil_dp_sonuclar.xlsx`, `.png` |
 | `alternatifler.py` | Screens 1,512 alternatives (PİK + BANT) | `hezil_alternatifler*.xlsx`, `hezil_alternatifler.png`, `hezil_ekonomi.png` |
 | `dashboard.py` | Embeds the screening results into a single-file HTML dashboard | `hezil_dashboard.html` |
-| `pano_sunucu.py` | Local HTTP server; `/api/isletme`, `/api/imalatci`, `/api/enkesit` | cache: `hezil_onbellek/*.json` |
+| `pano_sunucu.py` | Local HTTP server; login + gated `/api/isletme`, `/api/imalatci`, `/api/enkesit` | cache: `hezil_onbellek/*.json`; log: `giris_cikis.log` |
 | `isletme_detay.py` | Precomputes operation series for selected configurations | `hezil_isletme_detay.json` |
 | `sabit_fayda.py` | Fixed-tariff (88 €/MWh) scenario — no DP re-solve | `hezil_sabit_fayda.xlsx`, `.png` |
 | `em_duyarlilik.py` | Sensitivity of the optimum to EM unit cost — no DP re-solve | `hezil_em_duyarlilik.xlsx`, `.png` |

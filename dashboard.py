@@ -221,10 +221,13 @@ HTML = r"""<!DOCTYPE html>
   body{margin:0;background:var(--bg);color:var(--yazi);
        font:14px/1.5 "Segoe UI",system-ui,-apple-system,sans-serif}
   header{padding:14px 20px;border-bottom:1px solid var(--kenar);
-         background:var(--panel);position:sticky;top:0;z-index:20}
+         background:var(--panel);position:sticky;top:0;z-index:20;
+         display:flex;flex-wrap:wrap;align-items:center;column-gap:14px}
+  header>div:first-child{flex:1 1 auto;min-width:0}
   h1{margin:0;font-size:17px;letter-spacing:.2px}
   .altbaslik{color:var(--soluk);font-size:12px;margin-top:2px}
-  .sekmeler{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;align-items:center}
+  .sekmeler{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap;align-items:center;
+            flex:1 1 100%}
   .sekme{padding:7px 14px;border:2px solid var(--kenar);border-radius:7px;
          background:transparent;color:var(--soluk);cursor:pointer;font-size:13px;
          user-select:none}
@@ -334,14 +337,53 @@ HTML = r"""<!DOCTYPE html>
   .duyari{background:rgba(154,103,0,.12);border:1px solid rgba(154,103,0,.4);
           border-radius:7px;padding:9px 11px;font-size:12px;color:var(--yazi);
           margin-top:8px}
+  /* ---------- giriş / oturum ---------- */
+  #girisKatmani{position:fixed;inset:0;z-index:100;background:var(--bg);
+                display:flex;align-items:center;justify-content:center;padding:20px}
+  #girisKart{width:100%;max-width:370px;background:var(--panel);
+             border:1px solid var(--kenar);border-radius:12px;
+             padding:26px 28px 24px;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+  #girisKart h1{margin:0 0 2px;font-size:16px}
+  #girisKart .altbaslik{margin-bottom:14px}
+  #girisKart label{display:block;font-size:11px;color:var(--soluk);
+                   margin:12px 0 4px}
+  #girisKart input{width:100%;padding:8px 10px;font-size:13px;font-family:inherit;
+                   border:1px solid var(--kenar);border-radius:7px;
+                   background:var(--panel);color:var(--yazi)}
+  #girisKart input:focus{outline:2px solid var(--vurgu);outline-offset:-1px;
+                         border-color:transparent}
+  #girisHata{min-height:18px;font-size:12px;color:#cf222e;margin:10px 0 4px}
+  #girisDugmesi{width:100%;margin-top:6px}
+  #kullaniciKutu{align-items:center;gap:8px;font-size:13px;font-weight:600;
+                 color:var(--yazi);white-space:nowrap}
+  #kullaniciKutu .kopyala{margin-left:0;font-weight:400}
 </style>
 </head>
 <body>
 <header>
-  <h1>Hezil Barajı ve HES — Alternatif Analiz Panosu</h1>
-  <div class="altbaslik" id="ustbilgi"></div>
+  <div style="flex:1 1 auto;min-width:0">
+    <h1>Hezil Barajı ve HES — Alternatif Analiz Panosu</h1>
+    <div class="altbaslik" id="ustbilgi"></div>
+  </div>
+  <div id="kullaniciKutu" style="display:none">
+    <span id="kullaniciAdi"></span>
+    <button id="cikisDugmesi" class="kopyala">Çıkış</button>
+  </div>
   <div class="sekmeler" id="sekmeler"></div>
 </header>
+
+<div id="girisKatmani">
+  <div id="girisKart" role="dialog" aria-modal="true" aria-labelledby="girisBaslik">
+    <h1 id="girisBaslik">Hezil Barajı ve HES — Alternatif Analiz Panosu</h1>
+    <div class="altbaslik">Devam etmek için giriş yapın.</div>
+    <label for="girisKadi">Kullanıcı adı</label>
+    <input id="girisKadi" type="text" autocomplete="username" spellcheck="false">
+    <label for="girisSifre">Parola</label>
+    <input id="girisSifre" type="password" autocomplete="current-password">
+    <div id="girisHata" aria-live="polite"></div>
+    <button id="girisDugmesi" class="dugme">Giriş</button>
+  </div>
+</div>
 
 <main>
   <div>
@@ -1028,6 +1070,8 @@ const dAnahtar = d => `${d.dt.toFixed(1)}|${d.q.toFixed(1)}|${d.vc.toFixed(1)}`
      3) sunucu    — pano_sunucu.py, herhangi bir alternatifi anlık çözer     */
 let dOnbellek = {};
 let SUNUCU = null;              /* null: bilinmiyor · true/false: var/yok */
+let OTURUM_AKTIF = false;       /* oturum geçerli mi — nabız yalnız buna bağlı */
+let OTURUM_KULLANICI = null;    /* giriş yapan kullanıcı adı */
 
 function dYerel(d, amac){
   const a = dAnahtar(d);
@@ -1063,12 +1107,94 @@ async function sunucuYokla(){
   return SUNUCU;
 }
 
+/* ---------- giriş / oturum ---------- */
+async function oturumYokla(){
+  try{
+    const y = await fetch("api/oturum", {cache: "no-store"});
+    if (!y.ok) return false;                 /* 401 → giriş ekranında kal */
+    const j = await y.json();
+    OTURUM_AKTIF = true;
+    OTURUM_KULLANICI = j.kullanici || null;
+    oturumGizle();
+    return true;
+  }catch(e){ oturumGizle(); return true; }  /* sunucu yok → bağımsız mod */
+}
+function oturumGizle(){
+  const k = $("#girisKatmani"); if (k) k.style.display = "none";
+  if (OTURUM_AKTIF && OTURUM_KULLANICI){
+    const kk = $("#kullaniciKutu");
+    kk.style.display = "flex";
+    $("#kullaniciAdi").textContent = "👤 " + OTURUM_KULLANICI;
+  }
+}
+function oturumGoster(not){
+  OTURUM_AKTIF = false;
+  const kk = $("#kullaniciKutu"); if (kk) kk.style.display = "none";
+  const k = $("#girisKatmani"); if (k) k.style.display = "flex";
+  if (not) $("#girisHata").textContent = not;
+}
+function oturumDoldu(){
+  const gorunur = $("#girisKatmani").style.display !== "none";
+  oturumGoster(gorunur ? ""
+                       : "Oturum süresi doldu — yeniden giriş yapın.");
+}
+async function girisGonder(){
+  const kadi = $("#girisKadi").value.trim();
+  const sifre = $("#girisSifre").value;
+  const hata = $("#girisHata");
+  if (!kadi || !sifre){
+    hata.textContent = "Kullanıcı adı ve parola gereklidir.";
+    return;
+  }
+  const b = $("#girisDugmesi");
+  b.disabled = true; b.textContent = "Giriş yapılıyor…";
+  try{
+    const f = new URLSearchParams();
+    f.set("kullanici", kadi); f.set("sifre", sifre);
+    const y = await fetch("api/giris", {method: "POST", cache: "no-store",
+      headers: {"Content-Type": "application/x-www-form-urlencoded"},
+      body: f.toString()});
+    const j = await y.json();
+    if (y.ok && j.ok){
+      OTURUM_AKTIF = true; OTURUM_KULLANICI = j.kullanici;
+      $("#girisSifre").value = ""; hata.textContent = "";
+      oturumGizle();
+    }else{
+      hata.textContent = j.hata || "Giriş başarısız.";
+    }
+  }catch(e){
+    hata.textContent = "Sunucuya ulaşılamadı.";
+  }
+  b.disabled = false; b.textContent = "Giriş";
+}
+async function cikisGonder(){
+  try{ await fetch("api/cikis", {method: "POST", cache: "no-store"}); }
+  catch(e){}
+  oturumGoster("");
+}
+/* Nabız: yalnız oturum AKTİFken ve kullanıcı etkinliğinde (en fazla 60 s'de bir) */
+let sonNabiz = 0, sonHareket = 0;
+function nabizGonder(){
+  const simdi = Date.now();
+  if (!OTURUM_AKTIF) return;
+  if (simdi - sonHareket < 2000) return;     /* mousemove selini süzer */
+  sonHareket = simdi;
+  if (simdi - sonNabiz < 60000) return;      /* en fazla 60 s'de bir */
+  sonNabiz = simdi;
+  fetch("api/nabiz", {method: "POST", cache: "no-store"})
+    .then(y => { if (y.status === 401) oturumDoldu(); })
+    .catch(() => {});
+}
+["mousemove","mousedown","keydown","click","scroll","touchstart"]
+  .forEach(ev => document.addEventListener(ev, nabizGonder, {passive: true}));
+
 async function dGetir(d, amac){
   const y = dYerel(d, amac);
   if (y) return y;
   if (!(await sunucuYokla())) return null;
   const u = `api/isletme?dt=${d.dt}&q=${d.q}&vc=${d.vc}&km=${d.km}&amac=${amac}`;
   const c = await fetch(u, {cache: "no-store"});
+  if (c.status === 401){ oturumDoldu(); return null; }
   if (!c.ok) throw new Error("sunucu hatası " + c.status);
   const j = await c.json();
   if (j.hata) throw new Error(j.hata);
@@ -1435,6 +1561,7 @@ $("#dPaket").onclick = async () => {
     const u = `api/imalatci?dt=${d.dt}&q=${d.q}&vc=${d.vc}&km=${d.km}`
             + `&amac=${dAmac}`;
     const c = await fetch(u, {cache: "no-store"});
+    if (c.status === 401){ oturumDoldu(); throw new Error("oturum süresi doldu"); }
     const j = await c.json();
     if (j.hata) throw new Error(j.hata);
     const o = j.ozet, sat = (a, v) => `<tr><td>${a}</td><td>${v}</td></tr>`;
@@ -1481,6 +1608,7 @@ $("#dKesit").onclick = async () => {
     const u = `api/enkesit?dt=${d.dt}&q=${d.q}&vc=${d.vc}&km=${d.km}`
             + `&amac=${dAmac}&etiket=${encodeURIComponent(sen.kod + " " + sen.ad)}`;
     const c = await fetch(u, {cache: "no-store"});
+    if (c.status === 401){ oturumDoldu(); throw new Error("oturum süresi doldu"); }
     const j = await c.json();
     if (j.hata) throw new Error(j.hata);
     const v = j.vorteks, g = j.govde;
@@ -1520,6 +1648,16 @@ $("#dAmac").onchange = e => { dAmac = e.target.value; dAmacElle = true;
 $("#dYil").onchange = e => { dYil = e.target.value; detayCiz(); };
 
 kurSekmeler(); kurSecimler(); ciz();
+
+/* ---------- giriş / oturum başlatma ---------- */
+$("#girisDugmesi").onclick = girisGonder;
+["girisKadi", "girisSifre"].forEach(id => {
+  $("#" + id).addEventListener("keydown", e => {
+    if (e.key === "Enter") girisGonder();
+  });
+});
+$("#cikisDugmesi").onclick = cikisGonder;
+oturumYokla();
 </script>
 </body>
 </html>

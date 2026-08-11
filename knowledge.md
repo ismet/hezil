@@ -11,7 +11,7 @@ This file gives Freebuff context about your project: goals, commands, convention
 1. `python optimzasyon.py` — standalone DP solve. Reads inputs at module level, writes `hezil_dp_sonuclar.xlsx` / `.png`.
 2. `python alternatifler.py` — **alternative scan** (tunnel D × design Q × min water level × penstock v), solves DP for each (PİK and BANT objectives), parallel via multiprocessing. Writes `hezil_alternatifler.xlsx` + PNGs. ~1500+ runs, minutes.
 3. `python dashboard.py` — reads newest `hezil_alternatifler*.xlsx`, emits a **single-file, dependency-free HTML dashboard** (`hezil_dashboard.html`; data embedded, pure SVG+JS, dark/light).
-4. `python pano_sunucu.py` — local HTTP server (port 8765, auto-opens browser) that solves operation studies on demand (`/api/isletme`, `/api/imalatci`, `/api/enkesit`) and caches results to `hezil_onbellek/`. On Windows just double-click `pano_baslat.bat`.
+4. `python pano_sunucu.py` — local HTTP server (port 8765, auto-opens browser) that solves operation studies on demand (`/api/isletme`, `/api/imalatci`, `/api/enkesit`) and caches results to `hezil_onbellek/`. On Windows just double-click `pano_baslat.bat`. **`.env` dosyası zorunludur** (kopyalayın: `.env.example` → `.env`); yoksa sunucu başlamaz.
 
 Ancillary analyses (each runnable standalone, all read the newest scan file):
 - `isletme_detay.py` — precomputes monthly operation series JSON for selected configs (`hezil_isletme_detay.json`, embedded in dashboard as server-less fallback).
@@ -23,7 +23,7 @@ Ancillary analyses (each runnable standalone, all read the newest scan file):
 
 ## Setup / run
 
-- Package manifest: `requirements.txt` (`numpy pandas matplotlib openpyxl scipy`). Install: `pip install -r requirements.txt`. scipy is optional at runtime — used only for PCHIP, pure-numpy fallback exists.
+- Package manifest: `requirements.txt` (`numpy pandas matplotlib openpyxl scipy python-dotenv`). Install: `pip install -r requirements.txt`. scipy is optional at runtime — used only for PCHIP, pure-numpy fallback exists; python-dotenv is **required** by `pano_sunucu.py` (login).
 - No tests, no linter, no build step. Validate by running a script and checking its console output/exit code.
 - Typical first run: `python alternatifler.py` → `python dashboard.py` → `python pano_sunucu.py`.
 
@@ -47,3 +47,13 @@ Ancillary analyses (each runnable standalone, all read the newest scan file):
 - Tünel maliyeti table only spans D 4.0–6.0 m; outside, cost is extrapolated linearly with edge slopes (guard against cubic overshoot).
 - `hezil_onbellek/` JSON cache keys look like `4.4_57.8_4.0_700_gelir.json` (D_Q_vc_kot_amac). Stale cache is a gotcha when model inputs change — delete files for changed configs.
 - Don't change `INDIRGEME_ORANI`, `EM_BIRIM_EUR_KW`, `GELIR_KESINTI_ORANI` silently — economics/dashboards read or re-derive them from `alternatifler.py` (dashboard parses the constant out of the source text rather than importing).
+
+## Giriş / oturum (login) — pano_sunucu.py
+
+- Sunucu **`.env` olmadan başlamaz** (fail-fast). `.env.example` → `.env` kopyalayın; `KULLANICI_<N>_ADI` / `KULLANICI_<N>_SIFRE` çiftleriyle çoklu kullanıcı. `OTURUM_SURE_S` (varsayılan 3600 sn, en az 10) hareketsizlik süresi; `LOG_DOSYASI` (varsayılan `giris_cikis.log`) denetim kaydı.
+- Kayıtlardaki IP: doğrudan erişimde TCP eşi (istemci) yazılır; aynı makineden test edilirse `127.0.0.1` görünmesi NORMALDİR. Ters vekil (nginx/Caddy) arkasında gerçek istemci için `.env`'e `GUVENILIR_PROXY=127.0.0.1` (vekilin adresi) ekleyin — XFF başlığı yalnızca güvenilir vekilden geldiğinde kullanılır.
+- Uç noktalar: genel `POST /api/giris`, `POST /api/cikis`, `GET /api/durum`, `GET /api/oturum`; **oturum isteyen** (çerez `hezil_oturum` yoksa 401): `POST /api/nabiz`, `/api/isletme`, `/api/imalatci`, `/api/enkesit`.
+- Oturumlar **bellek içidir**; sunucu yeniden başlarsa herkes çıkış yapar. Aynı kullanıcı için birden çok eşzamanlı oturuma izin verilir.
+- HTML herkese servis edilir; giriş katmanı istemci tarafındadır. `file://` ile doğrudan açılış girişi **atlar** (tasarım gereği). Kimlik doğrulama yalnız `pano_sunucu.py` üzerinden geçerlidir.
+- **Eski-HTML koruması:** `hezil_dashboard.html` içinde `id="girisKatmani"` yoksa sunucu uyarır — `python dashboard.py` yeniden çalıştırın.
+- Kayıt satırı: `YYYY-MM-DD HH:MM:SS | GİRİŞ/HATALI GİRİŞ/ÇIKIŞ | kullanıcı=… | ip=… [| neden=…]`; otomatik çıkış `neden=hareketsizlik (süre aşımı)`, elle çıkış `neden=elle (çıkış düğmesi)`.

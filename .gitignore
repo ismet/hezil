@@ -1,0 +1,11 @@
+# Gizli bilgiler — asla commit etmeyin
+.env
+
+# Giriş/çıkış ve sunucu kayıtları
+giris_cikis.log
+pano_sunucu.log
+
+# Python
+__pycache__/
+venv/
+*.pyc

@@ -118,16 +118,31 @@ curl http://<PUBLIC_IP>:8765/api/durum   # verify from outside → {"durum":"haz
 Put nginx/Caddy on 80/443 → `127.0.0.1:8765`, with Let's Encrypt TLS. This gives you a clean URL
 (e.g. `https://hezil.example.com`), hides the port, and lets you add auth/rate-limiting.
 
+> **Client IPs in `giris_cikis.log`:** behind the proxy every connection comes from `127.0.0.1`,
+> so set `GUVENILIR_PROXY=127.0.0.1` in `.env` to log the real client IP from the
+> `X-Forwarded-For` header. Keep the proxy's own address there — nothing else, or the header
+> becomes spoofable.
+
 ---
 
 ## Security notes
 
 Before exposing the server publicly, consider:
 
-- **No authentication** on the API endpoints, and each click triggers a full DP solve (~1–2 s)
-  serialized under one global `threading.Lock` → a public instance is trivially DoS-able.
-  Add basic auth and/or rate limiting at the reverse proxy.
+- **Authentication now exists** (simple, multi-user): credentials live in `.env` (copy
+  `.env.example` → `.env`; the server fails fast without it). The dashboard page and all
+  `/api/*` endpoints except `giris` / `cikis` / `durum` / `oturum` return 401 without a valid
+  session cookie (`hezil_oturum`). Idle timeout defaults to 1 hour (`OTURUM_SURE_S`); every
+  login/logout is written to `giris_cikis.log`.
+- **Still no rate limiting**: each click triggers a full DP solve (~1–2 s) serialized under one
+  global `threading.Lock` → a public instance is trivially DoS-able (only a 0.5 s delay per
+  failed login slows brute force). Add rate limiting at the reverse proxy.
+- **Auth is client-side for the dashboard itself**: the HTML (with embedded data) is served to
+  anyone; the login overlay is JS. If you need the data itself protected, serve `/` as a
+  minimal login page instead and/or gate static files at the proxy. Hosting the same HTML on a
+  different static host (Path A) bypasses login entirely.
 - **`SimpleHTTPRequestHandler` serves the entire repo directory** — source code, input Excel
-  files, and the cache are all downloadable. For public exposure, restrict non-`/api/*` paths
-  or run from a dedicated directory.
+  files, and the cache are all downloadable (`.py`, `.xlsx`, `.csv` stay public by design). For
+  stricter exposure, restrict non-`/api/*` paths or run from a dedicated directory.
 - **Don't run as root**; use a dedicated user (`User=hezil` in the systemd unit above).
+- **`.env` and `giris_cikis.log` are git-ignored** — never commit credentials.
