@@ -1,246 +1,250 @@
-# Hezil Barajı ve HES — Alternatif Optimizasyon Çalışması
+# Hezil Dam & HPP — Alternative Optimization Study
 
-Hezil Barajı ve Hidroelektrik Santrali için **ön fizibilite / alternatif optimizasyonu** çalışması.
-Aylık gelen akımlar ve saatlik piyasa fiyatları kullanılarak, rezervuar işletme politikası
-**deterministik dinamik programlama (DP)** ile optimize edilir ve tünel çapı × tasarım debisi ×
-cebri boru hızı × minimum su kotu uzayında 1.512 alternatif taranır.
+A **pre-feasibility / alternative optimization study** for the Hezil Dam and Hydropower Plant (HPP).
+Using monthly inflows and hourly market prices, the reservoir operation policy is optimized with
+**deterministic dynamic programming (DP)**, and 1,512 alternatives are screened across the
+tunnel diameter × design discharge × penstock velocity × minimum operating level space.
 
-Proje tamamen Türkçedir (kod, yorumlar, Excel sayfaları, konsol çıktısı ve pano arayüzü).
-
----
-
-## İçindekiler
-
-- [Özellikler](#özellikler)
-- [Nasıl çalışır](#nasıl-çalışır)
-- [Kurulum](#kurulum)
-- [Kullanım (işlem sırası)](#kullanım-işlem-sırası)
-- [Betikler ve komut satırı](#betikler-ve-komut-satırı)
-- [Girdi dosyaları](#girdi-dosyaları)
-- [Senaryolar ve ekonomi](#senaryolar-ve-ekonomi)
-- [Çıktılar](#çıktılar)
-- [Proje yapısı](#proje-yapısı)
-- [Önemli kısıtlar ve tuzaklar](#önemli-kısıtlar-ve-tuzaklar)
+*Note: the project itself (code, comments, Excel sheets, console output, dashboard UI) is entirely
+in Turkish — all identifiers, comments, and UI labels follow the Turkish terminology.*
 
 ---
 
-## Özellikler
+## Table of contents
 
-- **Dinamik programlama tabanlı işletme optimizasyonu** — aylık rezervuar işletme politikası,
-  piyasa gelirini (PTF) maksimize edecek şekilde geriye doğru çözülür.
-  - *PİK (puant)* işletme: santral ayda az saatte tam yükte çalışır; üretim o ayın en pahalı
-    saatlerinden satılır (fiyat-süre eğrisi içbükey fayda fonksiyonu olarak kullanılır).
-  - *BANT* işletme: yalnız üretilen enerji maksimize edilir, gelir ayın ortalama fiyatından hesaplanır.
-- **4 boyutlu alternatif taraması** — 7 tünel çapı × 6 tünel hızı × 6 cebri boru hızı × 6 min. kot
-  = **1.512 konfigürasyon**, her biri PİK ve BANT amaçlarıyla ayrı ayrı çözülür (multiprocessing ile paralel).
-- **4 senaryo** — PİK·piyasa, BANT·piyasa, SABİT 88 €/MWh, YEKDEM (kademeli alım garantisi).
-- **Bağımlılıksız, tek dosyalık interaktif pano** — `hezil_dashboard.html` (gömülü veri, saf SVG + JS,
-  koyu/açık tema). İnternet veya kütüphane gerektirmez.
-- **Yerel pano sunucusu** — herhangi bir alternatifin işletme çalışmasını anlık çözer
-  (`pano_sunucu.py`, port 8765) ve sonuçları önbelleğe alır.
-- **Türbin imalatçısı veri paketi** (9 grafik + Excel) ve **ölçekli RCC gövde en kesiti** çizimi.
-- **Duyarlılık analizleri** — sabit tarife, EM birim maliyeti ve günlük zaman adımı etkisi (DP tekrarı olmadan).
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Installation](#installation)
+- [Usage (pipeline order)](#usage-pipeline-order)
+- [Scripts and command line](#scripts-and-command-line)
+- [Input files](#input-files)
+- [Scenarios and economics](#scenarios-and-economics)
+- [Outputs](#outputs)
+- [Project structure](#project-structure)
+- [Important constraints and gotchas](#important-constraints-and-gotchas)
 
 ---
 
-## Nasıl çalışır
+## Features
+
+- **DP-based reservoir operation optimization** — the monthly reservoir operation policy is solved
+  via backward induction to maximize market revenue (day-ahead price / PTF).
+  - *Peak (PİK) operation*: the plant runs at full load for a few hours each month; generation is
+    sold at the month's most expensive hours (the price-duration curve enters the DP as a concave
+    benefit function).
+  - *Baseload (BANT) operation*: only generated energy is maximized; revenue is valued at the
+    month's average price.
+- **4-dimensional alternative screening** — 7 tunnel diameters × 6 tunnel velocities × 6 penstock
+  velocities × 6 minimum levels = **1,512 configurations**, each solved separately for the PİK and
+  BANT objectives (parallelized with multiprocessing).
+- **4 scenarios** — PİK·market, BANT·market, FIXED 88 €/MWh, YEKDEM (tiered feed-in guarantee).
+- **Self-contained, single-file interactive dashboard** — `hezil_dashboard.html` (embedded data,
+  pure SVG + JS, dark/light theme). No internet or libraries required.
+- **Local dashboard server** — solves the operation study of any alternative on demand
+  (`pano_sunucu.py`, port 8765) and caches results.
+- **Turbine manufacturer data package** (9 charts + Excel) and a **scaled RCC dam cross-section**.
+- **Sensitivity analyses** — fixed tariff, EM unit cost, and daily time-step effects (no DP re-solve).
+
+---
+
+## How it works
 
 ```
 giris_akimlari.xlsx  ──┐
-kot_alan_hacim.xlsx  ──┼──►  optimzasyon.py  (DP çekirdeği)
+kot_alan_hacim.xlsx  ──┼──►  optimzasyon.py  (DP core)
 res_operation_table..csv ─┘        │
                                    ▼
                           alternatifler.py  ──►  hezil_alternatifler*.xlsx + PNG
                                    │
                                    ▼
-                          dashboard.py  ──►  hezil_dashboard.html (tek dosya)
+                          dashboard.py  ──►  hezil_dashboard.html (single file)
                                    │
                                    ▼
                           pano_sunucu.py  ──►  http://127.0.0.1:8765
-                                   (işletme çalışmalarını anlık çözer,
-                                    hezil_onbellek/ içine önbellekler)
+                                   (solves operation studies on demand,
+                                    caches into hezil_onbellek/)
 ```
 
-- **`optimzasyon.py`** kalptir: modül düzeyinde global girdi sabitleri (KOT_MAKS, Q_TASARIM, TUNEL_D,
-  AMAC, …) vardır; çağıranlar bu sabitleri değiştirip `yeniden_kur()` çağırarak modeli tazeler.
-- Hidrolik: Darcy-Weisbach (Swamee-Jain) sürtünmesi + ΣK·v²/2g yerel kayıpları; türbin verimi
-  imalatçı eğrisinden homolog ölçeklenir; cebri boru et kalınlığı/basıncı hesaplanır.
-- Ekonomi: yıllık gider = (tünel + EM + santral) yatırımı × 0,12 indirgeme oranı;
-  net fayda = yıllık gelir − yıllık gider.
+- **`optimzasyon.py`** is the heart: module-level global input constants (KOT_MAKS, Q_TASARIM,
+  TUNEL_D, AMAC, …); callers mutate these constants and call `yeniden_kur()` to refresh the model.
+- Hydraulics: Darcy-Weisbach (Swamee-Jain) friction + ΣK·v²/2g local losses; turbine efficiency is
+  scaled homologously from the manufacturer curve; penstock wall thickness/pressure is calculated.
+- Economics: annual cost = (tunnel + EM + plant) investment × 0.12 annualization rate;
+  net benefit = annual revenue − annual cost.
 
 ---
 
-## Kurulum
+## Installation
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Gereksinimler: `numpy`, `pandas`, `matplotlib`, `openpyxl` (ve `scipy`).
-**Not:** scipy yalnızca PCHIP interpolasyonu için kullanılır; saf numpy yedeği mevcut olduğundan
-çalışma zamanında zorunlu değildir.
+Requirements: `numpy`, `pandas`, `matplotlib`, `openpyxl` (and `scipy`).
+**Note:** scipy is used only for PCHIP interpolation; a pure-numpy fallback exists, so it is not
+strictly required at runtime.
 
-Test, linter veya derleme adımı yoktur. Doğrulama = betiği çalıştırıp konsol çıktısını/çıkış
-dosyalarını kontrol etmek.
+There is no test, linter, or build step. Validation means running a script and checking its
+console output/output files.
 
 ---
 
-## Kullanım (işlem sırası)
+## Usage (pipeline order)
 
 ```bash
-# 1) Tek başına DP çözümü (isteğe bağlı — örnek çıktı üretir)
+# 1) Standalone DP solve (optional — produces example output)
 python optimzasyon.py
 
-# 2) Alternatif taraması (1.512 alternatif × PİK+BANT = ~3.000 DP koşumu, birkaç dakika)
+# 2) Alternative screening (1,512 alternatives × PİK+BANT = ~3,000 DP runs, a few minutes)
 python alternatifler.py
 
-# 3) Tek dosyalık HTML pano üretimi
+# 3) Generate the single-file HTML dashboard
 python dashboard.py
 
-# 4) Yerel sunucu (işletme çalışmalarını anlık çözer, tarayıcıyı açar)
+# 4) Local server (solves operation studies on demand, opens the browser)
 python pano_sunucu.py
-#    Windows'ta çift tık: pano_baslat.bat
-#    Durdurmak için: Ctrl+C
+#    On Windows, double-click: pano_baslat.bat
+#    Stop with: Ctrl+C
 ```
 
-Sunucu çalışmasa bile `hezil_dashboard.html`'e çift tıklamak panoyu açar; yalnızca işletme
-çalışması bölümü gömülü yedek veriyi kullanır.
+Even without the server running, double-clicking `hezil_dashboard.html` opens the dashboard; only
+the operation-study section falls back to the embedded data.
 
 ---
 
-## Betikler ve komut satırı
+## Scripts and command line
 
-| Betik | Ne yapar | Çıktı |
+| Script | What it does | Output |
 |---|---|---|
-| `optimzasyon.py` | Tek konfigürasyon için DP işletme optimizasyonu + rapor | `hezil_dp_sonuclar.xlsx`, `.png` |
-| `alternatifler.py` | 1.512 alternatifin taranması (PİK + BANT) | `hezil_alternatifler*.xlsx`, `hezil_alternatifler.png`, `hezil_ekonomi.png` |
-| `dashboard.py` | Tarama sonucunu tek dosyalık HTML panoya gömer | `hezil_dashboard.html` |
-| `pano_sunucu.py` | Yerel HTTP sunucusu; `/api/isletme`, `/api/imalatci`, `/api/enkesit` | önbellek: `hezil_onbellek/*.json` |
-| `isletme_detay.py` | Seçili konfigürasyonların işletme serilerini önceden hesaplar | `hezil_isletme_detay.json` |
-| `sabit_fayda.py` | Sabit tarife (88 €/MWh) senaryosu — DP tekrarı yok | `hezil_sabit_fayda.xlsx`, `.png` |
-| `em_duyarlilik.py` | Optimumun EM birim maliyetine duyarlılığı — DP tekrarı yok | `hezil_em_duyarlilik.xlsx`, `.png` |
-| `gunluk_analiz.py` | Günlük zaman adımı kontrolü (min. kot sonucu değişiyor mu?) | `hezil_gunluk_analiz.xlsx`, `.png` |
-| `govde_enkesit.py` | Ölçekli RCC gövde en kesiti + vorteks batıklığı | `hezil_govde_enkesit_*.png` |
-| `imalatci_paketi.py` | Türbin imalatçısına 9 grafik + Excel paketi | `hezil_imalatci_paketi.png`, `.xlsx` |
+| `optimzasyon.py` | DP operation optimization + report for a single configuration | `hezil_dp_sonuclar.xlsx`, `.png` |
+| `alternatifler.py` | Screens 1,512 alternatives (PİK + BANT) | `hezil_alternatifler*.xlsx`, `hezil_alternatifler.png`, `hezil_ekonomi.png` |
+| `dashboard.py` | Embeds the screening results into a single-file HTML dashboard | `hezil_dashboard.html` |
+| `pano_sunucu.py` | Local HTTP server; `/api/isletme`, `/api/imalatci`, `/api/enkesit` | cache: `hezil_onbellek/*.json` |
+| `isletme_detay.py` | Precomputes operation series for selected configurations | `hezil_isletme_detay.json` |
+| `sabit_fayda.py` | Fixed-tariff (88 €/MWh) scenario — no DP re-solve | `hezil_sabit_fayda.xlsx`, `.png` |
+| `em_duyarlilik.py` | Sensitivity of the optimum to EM unit cost — no DP re-solve | `hezil_em_duyarlilik.xlsx`, `.png` |
+| `gunluk_analiz.py` | Daily time-step check (does the min-level result change?) | `hezil_gunluk_analiz.xlsx`, `.png` |
+| `govde_enkesit.py` | Scaled RCC dam cross-section + vortex submergence | `hezil_govde_enkesit_*.png` |
+| `imalatci_paketi.py` | 9-chart + Excel package for the turbine manufacturer | `hezil_imalatci_paketi.png`, `.xlsx` |
 
-### Komut satırı bayrakları
+### Command-line flags
 
-`govde_enkesit.py` ve `imalatci_paketi.py`:
+`govde_enkesit.py` and `imalatci_paketi.py`:
 
 ```bash
-python govde_enkesit.py                    # → S1 optimumu
-python govde_enkesit.py --senaryo S4       # → YEKDEM optimumu
-python govde_enkesit.py --konfig 4.4 60 5.0 720   # elle: (D, Q, v_c, kot)
+python govde_enkesit.py                    # → S1 optimum
+python govde_enkesit.py --senaryo S4       # → YEKDEM optimum
+python govde_enkesit.py --konfig 4.4 60 5.0 720   # manual: (D, Q, v_c, level)
 
-python imalatci_paketi.py                  # → S1 optimumu
-python imalatci_paketi.py --senaryo S4     # → YEKDEM optimumu
+python imalatci_paketi.py                  # → S1 optimum
+python imalatci_paketi.py --senaryo S4     # → YEKDEM optimum
 python imalatci_paketi.py --konfig 4.4 60 5.0 720
-python imalatci_paketi.py --amac enerji    # → bant işletme (varsayılan: gelir/pik)
+python imalatci_paketi.py --amac enerji    # → baseload operation (default: peak/revenue)
 ```
 
-### Tarama ızgarası (`alternatifler.py`)
+### Screening grid (`alternatifler.py`)
 
-| Boyut | Değerler |
+| Dimension | Values |
 |---|---|
-| Tünel çapı | 4.0 / 4.4 / 4.8 / 5.0 / 5.2 / 5.6 / 6.0 m (uzunluk 4 600 m sabit) |
-| Tünel hızı | 2.8 – 3.8 m/s (6 adım; Q = v·πD²/4) |
-| Cebri boru hızı | 3.5 – 6.0 m/s (6 adım; çap buna göre hesaplanır, uzunluk 300 m) |
-| Minimum su kotu | 690 – 740 m (5 m aralık; maks. kot 755 m sabit) |
+| Tunnel diameter | 4.0 / 4.4 / 4.8 / 5.0 / 5.2 / 5.6 / 6.0 m (length fixed at 4,600 m) |
+| Tunnel velocity | 2.8 – 3.8 m/s (6 steps; Q = v·πD²/4) |
+| Penstock velocity | 3.5 – 6.0 m/s (6 steps; diameter computed accordingly, length 300 m) |
+| Minimum operating level | 690 – 740 m (5 m steps; max level fixed at 755 m) |
 
-Toplam: 7 × 6 × 6 × 6 = **1.512 konfigürasyon**.
+Total: 7 × 6 × 6 × 6 = **1,512 configurations**.
 
 ---
 
-## Girdi dosyaları
+## Input files
 
-| Dosya | İçerik |
+| File | Contents |
 |---|---|
-| `giris_akimlari.xlsx` | Aylık gelen akımlar [hm³], su yılı **Ekim → Eylül** |
-| `kot_alan_hacim.xlsx` | Kot–alan–hacim tablosu (kot [m] · alan [km²] · hacim [hm³]) |
-| `res_operation_table_8760rows.csv` | Saatlik piyasa fiyatı (sütun: `price`, EUR/MWh). Yoksa sentetik seri üretilir → mutlak gelirler gösterge niteliğinde |
+| `giris_akimlari.xlsx` | Monthly inflows [hm³], water year **October → September** |
+| `kot_alan_hacim.xlsx` | Elevation–area–volume table (elevation [m] · area [km²] · volume [hm³]) |
+| `res_operation_table_8760rows.csv` | Hourly market price (column: `price`, EUR/MWh). If missing, a synthetic series is generated → absolute revenues are indicative only |
 
 ---
 
-## Senaryolar ve ekonomi
+## Scenarios and economics
 
-| Kod | Senaryo | İşletme | Değerleme |
+| Code | Scenario | Operation | Valuation |
 |---|---|---|---|
-| S1 | PİK · piyasa | PİK (gelir maks.) | saatlik PTF, en pahalı saatler |
-| S2 | BANT · piyasa | BANT (enerji maks.) | ay ortalama fiyatı |
-| S3 | SABİT 88 €/MWh | BANT | sabit birim fayda |
-| S4 | YEKDEM | BANT → PİK | 5 yıl 85 €/MWh + 5 yıl 75 €/MWh (bant) → 40 yıl piyasa (pik) |
+| S1 | PİK · market | PİK (revenue max.) | hourly day-ahead price, most expensive hours |
+| S2 | BANT · market | BANT (energy max.) | monthly average price |
+| S3 | Fixed 88 €/MWh | BANT | fixed unit benefit |
+| S4 | YEKDEM | BANT → PİK | 5 yr 85 €/MWh + 5 yr 75 €/MWh (baseload) → 40 yr market (peak) |
 
-Ekonomi sabitleri (`alternatifler.py`):
+Economics constants (`alternatifler.py`):
 
-- İndirgeme oranı: `INDIRGEME_ORANI = 0.12` (yatırım → yıllık gider)
-- EM birim maliyeti: `EM_BIRIM_EUR_KW = 140.0` €/kW
-- Santral + şalt: `SANTRAL_SALT_EUR_KW = 75.0` €/kW
-- Gelir kesintisi: `GELIR_KESINTI_ORANI = 0.09` (brüt gelir → net gelir)
-- Net fayda = yıllık gelir − yıllık gider = (brüt gelir × 0.91) − (yatırım × 0.12)
-
----
-
-## Çıktılar
-
-- **`hezil_dashboard.html`** — tarama sonuçlarını gösteren interaktif, tek dosyalık pano:
-  çoklu senaryo seçimi, seçilebilir eksenler (20+ büyüklük), filtreler (çap/hız/kot),
-  her senaryonun optimumu halkalanır ve kart olarak özetlenir, sabit maliyet ve B/C < 1
-  eleme araçları, işletme çalışması bölümü (sunucuyla anlık çözüm), alternatifler tablosu.
-- **`hezil_alternatifler*.xlsx`** — Girdiler + Tüm Alternatifler + Ekonomi + En İyi 20 +
-  Referans + pivot tabloları. Hedef dosya Excel'de açıkken zaman damgalı yedek yazılır;
-  alt betikler daima **en güncel** dosyayı okur.
-- **PNG raporları** — enerji/gelir taramaları, ekonomi, duyarlılık, günlük analiz, en kesit,
-  imalatçı paketi vb.
+- Annualization rate: `INDIRGEME_ORANI = 0.12` (investment → annual cost)
+- EM unit cost: `EM_BIRIM_EUR_KW = 140.0` €/kW
+- Plant + switchyard: `SANTRAL_SALT_EUR_KW = 75.0` €/kW
+- Revenue deduction: `GELIR_KESINTI_ORANI = 0.09` (gross revenue → net revenue)
+- Net benefit = annual revenue − annual cost = (gross revenue × 0.91) − (investment × 0.12)
 
 ---
 
-## Proje yapısı
+## Outputs
+
+- **`hezil_dashboard.html`** — interactive, single-file dashboard of the screening results:
+  multi-scenario selection, selectable axes (25+ metrics), filters (diameter/velocity/level),
+  each scenario's optimum is ringed and summarized as a card, fixed-cost and B/C < 1 elimination
+  tools, an operation-study section (solved live by the server), and an alternatives table.
+- **`hezil_alternatifler*.xlsx`** — Inputs + All Alternatives + Economics + Top 20 + Reference +
+  pivot tables. When the target file is open in Excel, a timestamped backup is written instead;
+  downstream scripts always read the **newest** file.
+- **PNG reports** — energy/revenue screening, economics, sensitivities, daily analysis,
+  cross-section, manufacturer package, etc.
+
+---
+
+## Project structure
 
 ```
 hezil/
-├── optimzasyon.py          # DP çekirdeği (global sabitler + yeniden_kur())
-├── alternatifler.py        # 1.512 alternatif taraması + ekonomi
-├── dashboard.py            # tek dosyalık HTML pano üreteci
-├── pano_sunucu.py          # yerel sunucu (port 8765) — anlık işletme çözümü
-├── pano_baslat.bat         # Windows çift tık başlatıcı
-├── isletme_detay.py        # işletme serilerini önceden hesaplar (JSON)
-├── sabit_fayda.py          # sabit tarife senaryosu
-├── em_duyarlilik.py        # EM maliyeti duyarlılığı
-├── gunluk_analiz.py        # günlük zaman adımı kontrolü
-├── govde_enkesit.py        # RCC gövde en kesiti
-├── imalatci_paketi.py      # türbin imalatçısı paketi
-├── giris_akimlari.xlsx     # aylık akımlar (girdi)
-├── kot_alan_hacim.xlsx     # kot-alan-hacim (girdi)
-├── res_operation_table_8760rows.csv  # saatlik fiyat (girdi)
+├── optimzasyon.py          # DP core (global constants + yeniden_kur())
+├── alternatifler.py        # 1,512-alternative screening + economics
+├── dashboard.py            # single-file HTML dashboard generator
+├── pano_sunucu.py          # local server (port 8765) — on-demand operation solves
+├── pano_baslat.bat         # Windows double-click launcher
+├── isletme_detay.py        # precomputes operation series (JSON)
+├── sabit_fayda.py          # fixed-tariff scenario
+├── em_duyarlilik.py        # EM cost sensitivity
+├── gunluk_analiz.py        # daily time-step check
+├── govde_enkesit.py        # RCC dam cross-section
+├── imalatci_paketi.py      # turbine manufacturer package
+├── giris_akimlari.xlsx     # monthly inflows (input)
+├── kot_alan_hacim.xlsx     # elevation-area-volume (input)
+├── res_operation_table_8760rows.csv  # hourly price (input)
 ├── requirements.txt
-├── knowledge.md            # proje bilgi dosyası (Freebuff/AI bağlamı)
-├── hezil_onbellek/         # sunucu önbelleği (D_Q_vc_kot_amac.json)
-└── hezil_*.xlsx / *.png    # üretilen çıktılar
+├── knowledge.md            # project knowledge file (AI context)
+├── hezil_onbellek/         # server cache (D_Q_vc_kot_amac.json)
+└── hezil_*.xlsx / *.png    # generated outputs
 ```
 
 ---
 
-## Önemli kısıtlar ve tuzaklar
+## Important constraints and gotchas
 
-- **Tek iş parçacığı değildir:** DP modül düzeyindeki global girdileri (Q_TASARIM, KOT_MIN,
-  BASLANGIC_KOTU, AMAC, çap…) değiştirir. `pano_sunucu.py` tüm DP/çizim işini tek
-  `threading.Lock` altında sıraya alır. Bu yolların içini paralelleştirmeyin.
-- **Çözmeden önce global sabitleri tam sıfırlayın:** `BASLANGIC_KOTU` konfigürasyonun
-  `KOT_MIN`'ine ayarlanır (yıl başı boş rezervuar). Kısmi sıfırlama bayat sonuç üretir.
-- **Tünel maliyeti tablosu yalnız D 4.0–6.0 m kapsar;** dışında maliyet kenar eğimleriyle
-  doğrusal tahmin edilir (kübik taşmayı önlemek için).
-- **`hezil_onbellek/` önbelleği bayatlayabilir:** model girdileri değişince değişen
-  konfigürasyonların JSON dosyalarını silin (anahtar: `4.4_57.8_4.0_700_gelir.json` biçiminde).
-- **Ekonomi sabitlerini sessizce değiştirmeyin** (`INDIRGEME_ORANI`, `EM_BIRIM_EUR_KW`,
-  `GELIR_KESINTI_ORANI`): `dashboard.py` indirgeme oranını kaynak metinden regex ile okur;
-  tutarsızlık pano ile Excel sonuçlarını ayrıştırır.
-- **Bayat dosya okuma:** tarama/Excel hedefi Excel'de açıkken, üreten betik zaman damgalı yedek
-  yazar; alt betikler glob-by-mtime ile **en yeni** `hezil_alternatifler*.xlsx`'i seçer —
-  sabit isim kullanmayın.
-- **Sentetik fiyat uyarısı:** fiyat dosyası bulunamazsa sentetik seri üretilir; mutlak gelir
-  rakamları o zaman yalnızca gösterge niteliğindedir.
-- **Günlük analiz uyarısı:** günlük akımlar aylık ortalamalardan sentetik türetilir
-  (gözlenmiş günlük seri yoktur); mutlak sonuçlar değil, min. kot sonucunun dayanıklılığı okunmalıdır.
-- **Gövde en kesiti ön tasarımdır:** stabilite, taşkın kabartması ve dalga tırmanması hesapları
-  ayrıca yapılmalıdır.
-- **Konsol çıktısı UTF-8'dir;** her betik `sys.stdout.reconfigure(encoding="utf-8")` ile başlar.
+- **Not thread-safe:** DP mutates module-level globals (Q_TASARIM, KOT_MIN, BASLANGIC_KOTU, AMAC,
+  diameters…). `pano_sunucu.py` serializes all DP/plot work under a single `threading.Lock`.
+  Never parallelize inside those paths.
+- **Reset globals fully before solving:** `BASLANGIC_KOTU` is set to the configuration's
+  `KOT_MIN` (start-of-year empty reservoir). Partial resets produce stale results.
+- **Tunnel cost table only covers D 4.0–6.0 m;** outside that range cost is extrapolated linearly
+  with edge slopes (to avoid cubic overshoot).
+- **The `hezil_onbellek/` cache can go stale:** after model inputs change, delete the JSON files
+  for the changed configurations (key format: `4.4_57.8_4.0_700_gelir.json`).
+- **Don't change economics constants silently** (`INDIRGEME_ORANI`, `EM_BIRIM_EUR_KW`,
+  `GELIR_KESINTI_ORANI`): `dashboard.py` reads the annualization rate from the source text via
+  regex; a mismatch desynchronizes the dashboard and the Excel results.
+- **Stale-file reads:** when the screening/Excel target is open in Excel, the producing script
+  writes a timestamped backup; downstream scripts select the **newest** `hezil_alternatifler*.xlsx`
+  via glob-by-mtime — never use a hardcoded name.
+- **Synthetic price warning:** if the price file is missing, a synthetic series is generated;
+  absolute revenue figures are then indicative only.
+- **Daily-analysis warning:** daily inflows are synthesized from monthly averages (no observed
+  daily series exists); read the robustness of the min-level result, not the absolute numbers.
+- **Dam cross-section is preliminary:** stability, flood surcharge, and wave run-up calculations
+  must be performed separately.
+- **Console output is UTF-8;** every script starts with `sys.stdout.reconfigure(encoding="utf-8")`.
