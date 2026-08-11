@@ -47,6 +47,7 @@ Ancillary analyses (each runnable standalone, all read the newest scan file):
 - Tünel maliyeti table only spans D 4.0–6.0 m; outside, cost is extrapolated linearly with edge slopes (guard against cubic overshoot).
 - `hezil_onbellek/` JSON cache keys look like `4.4_57.8_4.0_700_gelir.json` (D_Q_vc_kot_amac). Stale cache is a gotcha when model inputs change — delete files for changed configs.
 - Don't change `INDIRGEME_ORANI`, `EM_BIRIM_EUR_KW`, `GELIR_KESINTI_ORANI` silently — economics/dashboards read or re-derive them from `alternatifler.py` (dashboard parses the constant out of the source text rather than importing).
+- `dashboard.py`'de `PAKET_VE_KESIT_GOSTER = False` (varsayılan): "İmalatçı paketi üret" / "Gövde en kesiti" butonları ve `#dPaketSonuc` sonuç alanı HTML'e **hiç gömülmez**; `True` yapıp `python dashboard.py` ile yeniden üretin. Sunucu uç noktaları (`/api/imalatci`, `/api/enkesit`) bundan **etkilenmez** — yalnız arayüz gizlenir.
 
 ## Giriş / oturum (login) — pano_sunucu.py
 

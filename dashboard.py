@@ -120,6 +120,11 @@ DETAY_DOSYASI = "hezil_isletme_detay.json"
 #   "hepsi"→ isletme_detay.py'nin hesapladığı bütün konfigürasyonlar
 DETAY_GOMME = "az"
 
+# İşletme çalışması bölümündeki gelişmiş araç butonları:
+#   True  → "İmalatçı paketi üret" + "Gövde en kesiti" butonları ve sonuç alanı gösterilir
+#   False → bu butonlar ve #dPaketSonuc HTML'e hiç gömülmez (varsayılan)
+PAKET_VE_KESIT_GOSTER = False
+
 
 def detay_oku(kd):
     """Gömülecek işletme serileri (sunucu yoksa yedek olarak kullanılır)."""
@@ -456,13 +461,7 @@ alternatifler zarar ettirir; grafikten, tablodan ve optimum aramasından çıkar
         <div><label>Gösterilen dönem</label><select id="dYil"></select></div>
         <div class="aciklama" style="margin:0;max-width:430px" id="dNeden"></div>
         <div id="dDurum" class="rozet" style="display:none"></div>
-        <div style="margin-left:auto">
-          <label>Türbin imalatçısı</label>
-          <button id="dPaket" class="dugme">📐 İmalatçı paketi üret</button>
-          <button id="dKesit" class="dugme"
-                  style="background:#8250df;border-color:#8250df;margin-left:6px">
-            🏗 Gövde en kesiti</button>
-        </div>
+        __PAKET_KESIT_ALANI__
       </div>
       <div class="detaySer">
         <div>
@@ -471,7 +470,7 @@ alternatifler zarar ettirir; grafikten, tablodan ve optimum aramasından çıkar
             <svg id="dG2" viewBox="0 0 440 340" preserveAspectRatio="xMidYMid meet"></svg>
             <svg id="dG3" viewBox="0 0 440 340" preserveAspectRatio="xMidYMid meet"></svg>
           </div>
-          <div id="dPaketSonuc"></div>
+          __PAKET_SONUC_ALANI__
         </div>
         <div id="dKart"></div>
       </div>
@@ -1544,7 +1543,7 @@ function dKart(K, O, sen){
 }
 
 /* ---- İmalatçı paketi: sunucuda üret, bağlantıları göster ------------- */
-$("#dPaket").onclick = async () => {
+const pktBtn = $("#dPaket"); if (pktBtn) pktBtn.onclick = async () => {
   if (!secili) return;
   const d = secili.d, b = $("#dPaket"), kutu = $("#dPaketSonuc");
   if (!(await sunucuYokla())){
@@ -1591,7 +1590,7 @@ $("#dPaket").onclick = async () => {
 };
 
 /* ---- Gövde en kesiti: sunucuda çiz, önizleme ve bağlantı ------------- */
-$("#dKesit").onclick = async () => {
+const kesitBtn = $("#dKesit"); if (kesitBtn) kesitBtn.onclick = async () => {
   if (!secili) return;
   const d = secili.d, b = $("#dKesit"), kutu = $("#dPaketSonuc");
   if (!(await sunucuYokla())){
@@ -1644,7 +1643,9 @@ $("#dKesit").onclick = async () => {
 };
 
 $("#dAmac").onchange = e => { dAmac = e.target.value; dAmacElle = true;
-                              $("#dPaketSonuc").innerHTML = ""; detayCiz(); };
+                              const pk = $("#dPaketSonuc");
+                              if (pk) pk.innerHTML = "";
+                              detayCiz(); };
 $("#dYil").onchange = e => { dYil = e.target.value; detayCiz(); };
 
 kurSekmeler(); kurSecimler(); ciz();
@@ -1692,6 +1693,25 @@ def main():
     html = HTML
     for yer, nesne in gomulen.items():
         html = html.replace(yer, js(nesne))
+
+    # İmalatçı paketi / gövde en kesiti butonları (PAKET_VE_KESIT_GOSTER):
+    # kapalıyken (varsayılan) hiç gömülmez, açıkken blok yerleştirilir.
+    # NOT: gomulen/js() hattından GEÇİRİLMEZ — json.dumps HTML'i kaçırırdı.
+    # İki blok da şablon satırının kendi girintisini korur: yer tutucu satırı
+    # "        __PAKET_KESIT_ALANI__" biçiminde olduğundan blok başsız başlar.
+    paket_kesit_blok = ("""<div style="margin-left:auto">
+          <label>Türbin imalatçısı</label>
+          <button id="dPaket" class="dugme">📐 İmalatçı paketi üret</button>
+          <button id="dKesit" class="dugme"
+                  style="background:#8250df;border-color:#8250df;margin-left:6px">
+            🏗 Gövde en kesiti</button>
+        </div>""" if PAKET_VE_KESIT_GOSTER else "")
+    paket_sonuc_blok = ('<div id="dPaketSonuc"></div>'
+                        if PAKET_VE_KESIT_GOSTER else "")
+    html = html.replace("__PAKET_KESIT_ALANI__", paket_kesit_blok)
+    html = html.replace("__PAKET_SONUC_ALANI__", paket_sonuc_blok)
+    if "__PAKET_KESIT_ALANI__" in html or "__PAKET_SONUC_ALANI__" in html:
+        raise SystemExit("PANO ÜRETİLEMEDİ: doldurulmamış yer tutucu (PAKET/KESIT)")
 
     # --- kendi kendini denetle: gömülü her sabit geçerli JSON olmalı ---------
     hata = []

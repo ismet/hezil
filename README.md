@@ -137,7 +137,7 @@ the operation-study section falls back to the embedded data.
 |---|---|---|
 | `optimzasyon.py` | DP operation optimization + report for a single configuration | `hezil_dp_sonuclar.xlsx`, `.png` |
 | `alternatifler.py` | Screens 1,512 alternatives (PİK + BANT) | `hezil_alternatifler*.xlsx`, `hezil_alternatifler.png`, `hezil_ekonomi.png` |
-| `dashboard.py` | Embeds the screening results into a single-file HTML dashboard | `hezil_dashboard.html` |
+| `dashboard.py` | Embeds the screening results into a single-file HTML dashboard (advanced buttons "İmalatçı paketi üret" / "Gövde en kesiti" hidden by default — re-enable via `PAKET_VE_KESIT_GOSTER = True` in the script) | `hezil_dashboard.html` |
 | `pano_sunucu.py` | Local HTTP server; login + gated `/api/isletme`, `/api/imalatci`, `/api/enkesit` | cache: `hezil_onbellek/*.json`; log: `giris_cikis.log` |
 | `isletme_detay.py` | Precomputes operation series for selected configurations | `hezil_isletme_detay.json` |
 | `sabit_fayda.py` | Fixed-tariff (88 €/MWh) scenario — no DP re-solve | `hezil_sabit_fayda.xlsx`, `.png` |
